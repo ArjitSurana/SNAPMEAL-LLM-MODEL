@@ -2,7 +2,10 @@ import streamlit as st
 import google.generativeai as genai
 from PIL import Image
 import json
+import re
 import os
+from gtts import gTTS
+import tempfile
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -28,6 +31,41 @@ st.set_page_config(
 if 'theme' not in st.session_state:
     st.session_state.theme = "light"
 
+def generate_speech_summary(food_data):
+    try:
+        summary_prompt = f"""
+        Give a short, friendly, spoken-style summary (4-5 sentences)
+        of this food item based on the following data:
+
+        {json.dumps(food_data, indent=2)}
+
+        Make it natural and conversational.
+        """
+
+        response = model.generate_content(summary_prompt)
+
+        if response and hasattr(response, "text") and response.text:
+            return response.text.strip()
+        else:
+            return "⚠ AI returned empty summary."
+
+    except Exception as e:
+        return f"❌ Speech Error: {str(e)}"
+    
+def text_to_speech(text):
+    try:
+        tts = gTTS(text=text, lang="en")
+        
+        # Create temporary file
+        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".mp3")
+        tts.save(temp_file.name)
+        
+        return temp_file.name
+
+    except Exception as e:
+        return None
+    
+
 def toggle_theme():
     st.session_state.theme = "dark" if st.session_state.theme == "light" else "light"
 
@@ -47,7 +85,7 @@ if 'dietary_preference' not in st.session_state:
 st.markdown("""
 <style>
 .main-header {
-    font-size: 110x !important;
+    font-size: 110px !important;
     font-weight: 900 !important;
     text-align: left !important;
     margin-top: -30px;
@@ -239,6 +277,8 @@ Format:
                         
                         # Store current analysis
                         st.session_state.current_analysis = data
+                        speech = generate_speech_summary(data)
+                        st.session_state.current_speech = speech
                         
                         st.success("✅ Analysis Complete!")
                         
@@ -358,6 +398,22 @@ Format:
                     st.success("**Benefits:** " + ", ".join(benefits))
                 if concerns:
                     st.warning("**Concerns:** " + ", ".join(concerns))
+
+            # 🎙 AI Voice Summary
+            st.divider()
+            st.subheader("🎙 AI Voice Summary")
+
+            if 'current_speech' in st.session_state:
+                speech_text = st.session_state.current_speech
+                st.info(speech_text)
+
+                if st.button("▶ Play Audio"):
+                    audio_file = text_to_speech(speech_text)
+                    if audio_file:
+                        audio_bytes = open(audio_file, "rb").read()
+                        st.audio(audio_bytes, format="audio/mp3")
+                    else:
+                        st.error("Audio generation failed.")
             
             # Action Buttons
             st.divider()
